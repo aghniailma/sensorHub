@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SensorHub | Dashboard Monitoring IoT</title>
+
+  <!-- Tailwind CSS (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <!-- Font Awesome (ikon) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <!-- Chart.js (grafik) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    @keyframes pulseDot { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .live-dot { animation: pulseDot 1.2s infinite; }
+    .toast-in { animation: toastIn .25s ease-out; }
+    @keyframes toastIn { from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none} }
+  </style>
+</head>
+
+<body class="bg-slate-100 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen transition-colors">
+
+  <!-- HEADER -->
+  <header class="sticky top-0 z-30 bg-white/80 dark:bg-slate-800/80 backdrop-blur border-b border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center text-white">
+          <i class="fa-solid fa-microchip"></i>
+        </div>
+        <div>
+          <h1 class="font-bold leading-tight">SensorHub</h1>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Monitoring suhu &amp; kelembapan</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span class="hidden sm:flex items-center gap-2 text-xs px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+          <span id="liveDot" class="w-2 h-2 rounded-full bg-emerald-500 live-dot"></span>
+          <span id="liveText">Live</span>
+        </span>
+        <button id="btnPause" class="px-3 py-2 rounded-lg text-sm border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700" title="Jeda / lanjut data live">
+          <i class="fa-solid fa-pause"></i>
+        </button>
+        <button id="btnTheme" class="px-3 py-2 rounded-lg text-sm border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700" title="Ganti tema">
+          <i class="fa-solid fa-moon"></i>
+        </button>
+        <button id="btnAdd" class="px-3 py-2 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-700 text-white">
+          <i class="fa-solid fa-plus"></i><span class="hidden sm:inline ml-1">Perangkat</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- TABS -->
+    <nav class="max-w-6xl mx-auto px-4 flex gap-1 overflow-x-auto" id="tabs">
+      <button data-tab="overview" class="tab-btn px-4 py-2 text-sm font-medium border-b-2">Ringkasan</button>
+      <button data-tab="devices"  class="tab-btn px-4 py-2 text-sm font-medium border-b-2">Perangkat</button>
+      <button data-tab="log"      class="tab-btn px-4 py-2 text-sm font-medium border-b-2">Log Aktivitas</button>
+    </nav>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-6">
+
+    <!-- TAB: RINGKASAN -->
+    <section id="tab-overview" class="tab-panel space-y-6">
+      <div id="stats" class="grid grid-cols-2 lg:grid-cols-4 gap-4"></div>
+
+      <div class="grid lg:grid-cols-3 gap-4">
+        <div class="lg:col-span-2 bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="font-semibold">Grafik Real-time</h2>
+            <span class="text-xs text-slate-500 dark:text-slate-400">20 data terakhir</span>
+          </div>
+          <div class="h-64"><canvas id="liveChart"></canvas></div>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
+          <h2 class="font-semibold mb-3">Ambang Batas Suhu</h2>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">Notifikasi muncul jika suhu melewati batas.</p>
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-sm">Batas atas</span>
+            <span class="font-bold text-emerald-600 dark:text-emerald-400"><span id="thrVal">34</span> °C</span>
+          </div>
+          <input id="thrRange" type="range" min="28" max="40" value="34" class="w-full accent-emerald-600" />
+          <div class="mt-5 p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 text-sm">
+            <p class="text-slate-500 dark:text-slate-400">Status sistem</p>
+            <p id="sysStatus" class="font-semibold text-emerald-600 dark:text-emerald-400"><i class="fa-solid fa-circle-check mr-1"></i>Normal</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB: PERANGKAT -->
+    <section id="tab-devices" class="tab-panel hidden">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-semibold text-lg">Daftar Perangkat</h2>
+        <span id="devCount" class="text-sm text-slate-500 dark:text-slate-400"></span>
+      </div>
+      <div id="deviceGrid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+    </section>
+
+    <!-- TAB: LOG -->
+    <section id="tab-log" class="tab-panel hidden">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-semibold text-lg">Log Aktivitas</h2>
+        <button id="btnClearLog" class="text-sm text-slate-500 hover:text-red-500">Bersihkan</button>
+      </div>
+      <ul id="logList" class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700"></ul>
+    </section>
+  </main>
+
+  <footer class="text-center text-xs text-slate-400 py-6">
+    SensorHub &copy; 2026 &mdash; Mockup MVP dengan data dummy
+  </footer>
+
+  <!-- MODAL TAMBAH PERANGKAT -->
+  <div id="modal" class="hidden fixed inset-0 z-40 bg-black/50 items-center justify-center p-4">
+    <form id="formAdd" class="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-md shadow-xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="font-bold text-lg">Tambah Perangkat</h3>
+        <button type="button" id="btnClose" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div>
+        <label class="text-sm font-medium">Nama perangkat</label>
+        <input id="inName" required maxlength="30" placeholder="mis. Sensor Gudang"
+          class="mt-1 w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+      </div>
+      <div>
+        <label class="text-sm font-medium">Lokasi</label>
+        <input id="inLoc" required maxlength="30" placeholder="mis. Lantai 2"
+          class="mt-1 w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+      </div>
+      <div>
+        <label class="text-sm font-medium">Jenis</label>
+        <select id="inType"
+          class="mt-1 w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+          <option value="sensor">Sensor</option>
+          <option value="aktuator">Aktuator</option>
+        </select>
+      </div>
+      <button class="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium">Simpan</button>
+    </form>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toasts" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
+
+  <!-- DATA JSON (data dummy awal) -->
+  <script id="seed-data" type="application/json">
+  {
+    "threshold": 34,
+    "metrics": [
+      { "id": "temp", "label": "Suhu Ruangan",    "unit": "°C", "icon": "fa-temperature-half", "color": "#f97316", "min": 24, "max": 38,  "start": 29.5, "device": "d1" },
+      { "id": "hum",  "label": "Kelembapan Udara","unit": "%",  "icon": "fa-droplet",          "color": "#06b6d4", "min": 40, "max": 90,  "start": 65,   "device": "d2" },
+      { "id": "soil", "label": "Kelembapan Tanah","unit": "%",  "icon": "fa-seedling",         "color": "#10b981", "min": 20, "max": 85,  "start": 55,   "device": "d3" }
+    ],
+    "devices": [
+      { "id": "d1", "name": "Sensor Suhu DHT22",      "location": "Ruang Utama",  "type": "sensor",   "on": true  },
+      { "id": "d2", "name": "Sensor Kelembapan Udara","location": "Ruang Utama",  "type": "sensor",   "on": true  },
+      { "id": "d3", "name": "Sensor Soil Moisture",   "location": "Kebun Depan",  "type": "sensor",   "on": true  },
+      { "id": "d4", "name": "Pompa Air",              "location": "Kebun Depan",  "type": "aktuator", "on": false },
+      { "id": "d5", "name": "Kipas Ventilasi",        "location": "Ruang Utama",  "type": "aktuator", "on": true  }
+    ],
+    "log": [
+      "Sistem SensorHub dimulai",
+      "Semua sensor terhubung"
+    ]
+  }
+  </script>
+
+  <!-- LOGIKA JAVASCRIPT -->
+  <script>
+    // ---------- STATE ----------
+    const seed = JSON.parse(document.getElementById('seed-data').textContent);
+    let devices = seed.devices.map(d => ({ ...d }));
+    let threshold = seed.threshold;
+    let paused = false;
+    let lastAlert = 0;
+    const MAX_POINTS = 20;
+    const values = {};
+    seed.metrics.forEach(m => values[m.id] = m.start);
+
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const nowStr = () => new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    // ---------- TOAST ----------
+    function toast(msg, type = 'info') {
+      const colors = {
+        info: 'bg-slate-800 text-white',
+        success: 'bg-emerald-600 text-white',
+        warning: 'bg-amber-500 text-white',
+        danger: 'bg-red-600 text-white'
+      };
+      const icons = { info: 'fa-circle-info', success: 'fa-circle-check', warning: 'fa-triangle-exclamation', danger: 'fa-circle-exclamation' };
+      const el = document.createElement('div');
+      el.className = `toast-in flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-sm ${colors[type]}`;
+      el.innerHTML = `<i class="fa-solid ${icons[type]}"></i><span>${esc(msg)}</span>`;
+      $('toasts').appendChild(el);
+      setTimeout(() => el.remove(), 3500);
+    }
+
+    // ---------- LOG ----------
+    const logs = [];
+    function addLog(text) {
+      logs.unshift({ time: nowStr(), text });
+      if (logs.length > 50) logs.pop();
+      renderLog();
+    }
+    function renderLog() {
+      $('logList').innerHTML = logs.length
+        ? logs.map(l => `<li class="px-4 py-3 text-sm flex gap-3">
+              <span class="text-slate-400 tabular-nums">${l.time}</span><span>${esc(l.text)}</span></li>`).join('')
+        : `<li class="px-4 py-6 text-center text-sm text-slate-400">Belum ada aktivitas</li>`;
+    }
+    seed.log.slice().reverse().forEach(addLog);
+
+    // ---------- STAT CARDS ----------
+    function renderStats() {
+      const cards = seed.metrics.map(m => `
+        <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-slate-500 dark:text-slate-400">${m.label}</span>
+            <span class="w-9 h-9 rounded-lg flex items-center justify-center text-white" style="background:${m.color}">
+              <i class="fa-solid ${m.icon}"></i></span>
+          </div>
+          <p class="mt-3 text-3xl font-bold tabular-nums"><span id="val-${m.id}">--</span><span class="text-base font-medium text-slate-400 ml-1">${m.unit}</span></p>
+          <div class="mt-3 h-1.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+            <div id="bar-${m.id}" class="h-full rounded-full transition-all duration-500" style="width:0%;background:${m.color}"></div>
+          </div>
+          <p id="st-${m.id}" class="mt-2 text-xs text-slate-400"></p>
+        </div>`).join('');
+
+      const active = `
+        <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-slate-500 dark:text-slate-400">Perangkat Aktif</span>
+            <span class="w-9 h-9 rounded-lg flex items-center justify-center text-white bg-violet-500"><i class="fa-solid fa-plug"></i></span>
+          </div>
+          <p class="mt-3 text-3xl font-bold tabular-nums"><span id="activeCount">0</span><span class="text-base font-medium text-slate-400"> / <span id="totalCount">0</span></span></p>
+          <p class="mt-5 text-xs text-slate-400">Sensor &amp; aktuator terhubung</p>
+        </div>`;
+      $('stats').innerHTML = cards + active;
+    }
+
+    function updateStats() {
+      seed.metrics.forEach(m => {
+        const dev = devices.find(d => d.id === m.device);
+        const isOn = dev && dev.on;
+        $('val-' + m.id).textContent = isOn ? values[m.id].toFixed(1) : '--';
+        const pct = ((values[m.id] - m.min) / (m.max - m.min)) * 100;
+        $('bar-' + m.id).style.width = isOn ? Math.max(0, Math.min(100, pct)) + '%' : '0%';
+        $('st-' + m.id).textContent = isOn ? 'Sumber: ' + dev.name : 'Perangkat offline';
+      });
+      const on = devices.filter(d => d.on).length;
+      $('activeCount').textContent = on;
+      $('totalCount').textContent = devices.length;
+    }
+
+    // ---------- CHART ----------
+    let chart;
+    function initChart() {
+      const ctx = $('liveChart').getContext('2d');
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: seed.metrics.map(m => ({
+            label: m.label + ' (' + m.unit + ')',
+            data: [],
+            borderColor: m.color,
+            backgroundColor: m.color + '22',
+            borderWidth: 2,
+            tension: 0.35,
+            pointRadius: 0,
+            fill: false,
+            spanGaps: false
+          }))
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: { duration: 400 },
+          interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, usePointStyle: true } } },
+          scales: {
+            x: { grid: { display: false }, ticks: { maxTicksLimit: 6 } },
+            y: { grid: { color: 'rgba(148,163,184,.2)' } }
+          }
+        }
+      });
+    }
+
+    function pushChart() {
+      chart.data.labels.push(nowStr());
+      seed.metrics.forEach((m, i) => {
+        const dev = devices.find(d => d.id === m.device);
+        chart.data.datasets[i].data.push(dev && dev.on ? +values[m.id].toFixed(1) : null);
+      });
+      if (chart.data.labels.length > MAX_POINTS) {
+        chart.data.labels.shift();
+        chart.data.datasets.forEach(ds => ds.data.shift());
+      }
+      chart.update();
+    }
+
+    // ---------- SIMULASI DATA LIVE ----------
+    function tick() {
+      if (paused) return;
+      seed.metrics.forEach(m => {
+        const step = (Math.random() - 0.5) * (m.max - m.min) * 0.04;
+        values[m.id] = Math.max(m.min, Math.min(m.max, values[m.id] + step));
+      });
+
+      // Pompa air menaikkan kelembapan tanah
+      const pump = devices.find(d => d.name.toLowerCase().includes('pompa'));
+      if (pump && pump.on) values.soil = Math.min(85, values.soil + 1.2);
+
+      // Kipas menurunkan suhu
+      const fan = devices.find(d => d.name.toLowerCase().includes('kipas'));
+      if (fan && fan.on) values.temp = Math.max(24, values.temp - 0.15);
+
+      updateStats();
+      pushChart();
+      checkAlert();
+    }
+
+    function checkAlert() {
+      const tempDev = devices.find(d => d.id === 'd1');
+      const over = tempDev && tempDev.on && values.temp > threshold;
+      const el = $('sysStatus');
+      if (over) {
+        el.className = 'font-semibold text-red-600 dark:text-red-400';
+        el.innerHTML = '<i class="fa-solid fa-triangle-exclamation mr-1"></i>Suhu melewati batas';
+        if (Date.now() - lastAlert > 10000) {
+          lastAlert = Date.now();
+          toast(`Suhu ${values.temp.toFixed(1)} °C melewati batas ${threshold} °C`, 'danger');
+          addLog(`PERINGATAN: suhu ${values.temp.toFixed(1)} °C > ${threshold} °C`);
+        }
+      } else {
+        el.className = 'font-semibold text-emerald-600 dark:text-emerald-400';
+        el.innerHTML = '<i class="fa-solid fa-circle-check mr-1"></i>Normal';
+      }
+    }
+
+    // ---------- DEVICES ----------
+    function renderDevices() {
+      $('devCount').textContent = `${devices.filter(d => d.on).length} dari ${devices.length} aktif`;
+      $('deviceGrid').innerHTML = devices.map(d => {
+        const icon = d.type === 'sensor' ? 'fa-satellite-dish' : 'fa-gears';
+        return `
+        <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-11 h-11 shrink-0 rounded-xl flex items-center justify-center ${d.on ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400' : 'bg-slate-100 text-slate-400 dark:bg-slate-700'}">
+                <i class="fa-solid ${icon}"></i>
+              </div>
+              <div class="min-w-0">
+                <p class="font-semibold truncate">${esc(d.name)}</p>
+                <p class="text-xs text-slate-500 dark:text-slate-400 truncate"><i class="fa-solid fa-location-dot mr-1"></i>${esc(d.location)}</p>
+              </div>
+            </div>
+            <button data-toggle="${d.id}" role="switch" aria-checked="${d.on}"
+              class="relative shrink-0 w-12 h-7 rounded-full transition-colors ${d.on ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}">
+              <span class="absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform ${d.on ? 'translate-x-5' : ''}"></span>
+            </button>
+          </div>
+          <div class="mt-3 flex items-center justify-between text-xs">
+            <span class="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-700 capitalize">${d.type}</span>
+            <span class="${d.on ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'} font-medium">${d.on ? 'Online' : 'Offline'}</span>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    $('deviceGrid').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-toggle]');
+      if (!btn) return;
+      const dev = devices.find(d => d.id === btn.dataset.toggle);
+      dev.on = !dev.on;
+      toast(`${dev.name} ${dev.on ? 'dinyalakan' : 'dimatikan'}`, dev.on ? 'success' : 'info');
+      addLog(`${dev.name} ${dev.on ? 'dinyalakan' : 'dimatikan'}`);
+      renderDevices();
+      updateStats();
+    });
+
+    // ---------- TABS ----------
+    function setTab(name) {
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+      $('tab-' + name).classList.remove('hidden');
+      document.querySelectorAll('.tab-btn').forEach(b => {
+        const active = b.dataset.tab === name;
+        b.classList.toggle('border-emerald-600', active);
+        b.classList.toggle('text-emerald-600', active);
+        b.classList.toggle('dark:text-emerald-400', active);
+        b.classList.toggle('border-transparent', !active);
+        b.classList.toggle('text-slate-500', !active);
+      });
+    }
+    $('tabs').addEventListener('click', (e) => {
+      const b = e.target.closest('.tab-btn');
+      if (b) setTab(b.dataset.tab);
+    });
+
+    // ---------- MODAL ----------
+    const openModal = () => { $('modal').classList.remove('hidden'); $('modal').classList.add('flex'); $('inName').focus(); };
+    const closeModal = () => { $('modal').classList.add('hidden'); $('modal').classList.remove('flex'); $('formAdd').reset(); };
+    $('btnAdd').addEventListener('click', openModal);
+    $('btnClose').addEventListener('click', closeModal);
+    $('modal').addEventListener('click', (e) => { if (e.target === $('modal')) closeModal(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+    $('formAdd').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const dev = {
+        id: 'd' + Date.now(),
+        name: $('inName').value.trim(),
+        location: $('inLoc').value.trim(),
+        type: $('inType').value,
+        on: true
+      };
+      devices.push(dev);
+      toast(`${dev.name} berhasil ditambahkan`, 'success');
+      addLog(`Perangkat baru: ${dev.name} (${dev.location})`);
+      renderDevices();
+      updateStats();
+      closeModal();
+      setTab('devices');
+    });
+
+    // ---------- KONTROL LAIN ----------
+    $('thrRange').addEventListener('input', (e) => {
+      threshold = +e.target.value;
+      $('thrVal').textContent = threshold;
+      checkAlert();
+    });
+
+    $('btnPause').addEventListener('click', () => {
+      paused = !paused;
+      $('btnPause').innerHTML = `<i class="fa-solid ${paused ? 'fa-play' : 'fa-pause'}"></i>`;
+      $('liveText').textContent = paused ? 'Dijeda' : 'Live';
+      $('liveDot').classList.toggle('live-dot', !paused);
+      $('liveDot').classList.toggle('bg-emerald-500', !paused);
+      $('liveDot').classList.toggle('bg-slate-400', paused);
+      toast(paused ? 'Data live dijeda' : 'Data live dilanjutkan', 'info');
+    });
+
+    $('btnTheme').addEventListener('click', () => {
+      const dark = document.documentElement.classList.toggle('dark');
+      $('btnTheme').innerHTML = `<i class="fa-solid ${dark ? 'fa-sun' : 'fa-moon'}"></i>`;
+      if (chart) {
+        const c = dark ? '#cbd5e1' : '#475569';
+        Chart.defaults.color = c;
+        chart.options.scales.x.ticks.color = c;
+        chart.options.scales.y.ticks.color = c;
+        chart.options.plugins.legend.labels.color = c;
+        chart.update();
+      }
+    });
+
+    $('btnClearLog').addEventListener('click', () => { logs.length = 0; renderLog(); toast('Log dibersihkan', 'info'); });
+
+    // ---------- INIT ----------
+    renderStats();
+    initChart();
+    renderDevices();
+    renderLog();
+    setTab('overview');
+    updateStats();
+    for (let i = 0; i < 8; i++) tick();   // isi grafik awal
+    setInterval(tick, 2000);               // update tiap 2 detik
+  </script>
+</body>
+</html>
